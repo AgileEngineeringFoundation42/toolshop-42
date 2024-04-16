@@ -1,0 +1,69 @@
+name: deploy2ahdev.yml
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency: production_environment
+
+jobs:
+  deploy2ahdev:
+    name: deploy2ahdev
+    runs-on: ubuntu-latest    
+    steps:
+      - name: Docker 
+        uses: fifsky/ssh-action@master
+        with:
+          command: |
+            sudo su
+            apt install git-all -y
+            apt install docker-compose -y
+            apt update -y && apt upgrade -y
+            cd /root
+            cd toolshop/practice-software-testing
+            git pull 
+            ls -la
+            cd practice-software-testing
+            docker-compose up -d
+            docker ps -a
+            docker images
+          host: 109.176.250.87
+          user: ahdevuser
+          key: ${{ secrets.PRIVATE_KEY}}
+          
+  playwrightTests:
+    name: playwrightTests
+    needs: [deploy2ahdev]
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        shell: bash
+
+      - name: Checkout ⚙️
+        uses: actions/checkout@v4
+
+      - name: Install node ⚙️
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          
+      - name: Install dependencies ⚙️
+        run: npm ci
+        
+      - name: Install Playwright Browsers 
+        run: npx playwright install --with-deps
+        
+      - name: Run Playwright tests 
+        run: npx playwright test DEVlogin.spec.ts --reporter=html
+        
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          #name: playwright-report 
+          name: screenshot.png
+          path: playwright-report/screenshot.png
+          retention-days: 10
+          
+
