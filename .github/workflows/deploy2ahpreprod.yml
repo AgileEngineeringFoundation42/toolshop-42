@@ -29,4 +29,4 @@ jobs:
           #host: ${{ secrets.HOST }}
           host: ${{ vars.IP }}
           user: ahproduser
-          key: ${{ secrets.PROD_DEPLOYMENT_KEY}}
+          key: ${{ secrets.PREPROD_DEPLOYMENT_KEY}}
