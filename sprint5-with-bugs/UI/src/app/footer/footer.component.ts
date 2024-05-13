@@ -7,7 +7,10 @@ import {Component} from '@angular/core';
 })
 export class FooterComponent {
 
+  version: string = '1.0';
+
   constructor() {
   }
 
 }
+
