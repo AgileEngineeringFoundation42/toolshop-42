@@ -32,3 +32,37 @@ jobs:
           host: ${{ vars.IP }}
           user: ahproduser
           key: ${{ secrets.PROD_DEPLOYMENT_KEY}}
+  playwrightTests:
+    name: playwrightTests
+    needs: [deploy2ahprod]
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Sleep for 30 seconds
+        run: sleep 30s
+        shell: bash
+
+      - name: Checkout ⚙️
+        uses: actions/checkout@v4
+
+      - name: Install node ⚙️
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          
+      - name: Install dependencies ⚙️
+        run: npm ci
+        
+      - name: Install Playwright Browsers 
+        run: npx playwright install --with-deps
+        
+      - name: Run Playwright tests 
+        run: npx playwright test DEVlogin.spec.ts --reporter=html
+        
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          #name: playwright-report 
+          name: screenshot.png
+          path: playwright-report/screenshot.png
+          retention-days: 10
