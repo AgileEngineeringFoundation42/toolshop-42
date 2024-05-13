@@ -27,6 +27,6 @@ jobs:
             docker ps -a
             docker images
           #host: ${{ secrets.HOST }}
-          host: 109.176.250.133
+          host: ${{ vars.IP }}
           user: ahproduser
-          key: ${{ secrets.PRIVATE_KEY}}
+          key: ${{ secrets.PROD_DEPLOYMENT_KEY}}

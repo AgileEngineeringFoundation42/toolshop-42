@@ -28,7 +28,7 @@ jobs:
             docker-compose up -d
             docker ps -a
             docker images
-          host: 109.176.250.87
+          host: ${{ vars.IP }}
           user: ahdevuser
           key: ${{ secrets.DEPLOYMENT_KEY}}
           
