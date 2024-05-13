@@ -1,8 +1,8 @@
 name: deploy2ahdev.yml
 on:
-  push:
+  pull_request:
     branches: [ main ]
-  workflow_dispatch:
+    types: 'closed'
 
 concurrency: production_environment
 
