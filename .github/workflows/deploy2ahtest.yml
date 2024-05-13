@@ -57,7 +57,7 @@ jobs:
         run: npx playwright install --with-deps
         
       - name: Run Playwright tests 
-        run: npx playwright test DEVlogin.spec.ts --reporter=html
+        run: npx playwright test TESTlogin.spec.ts --reporter=html
         
       - uses: actions/upload-artifact@v4
         if: always()
