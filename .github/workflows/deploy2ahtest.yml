@@ -1,8 +1,8 @@
 name: deploy2ahtest.yml
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [deploy2ahdev.yml]
+    types: [completed]
 
 concurrency: production_environment
 
@@ -10,7 +10,8 @@ jobs:
   deploy2ahtest:
     name: deploy2ahtest
     runs-on: ubuntu-latest
-    environment: TEST    
+    environment: TEST
+    if 
     steps:
       - name: Docker 
         uses: fifsky/ssh-action@master
