@@ -11,7 +11,7 @@ jobs:
     name: deploy2ahtest
     runs-on: ubuntu-latest
     environment: TEST
-    if 
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Docker 
         uses: fifsky/ssh-action@master
@@ -67,3 +67,10 @@ jobs:
           name: screenshot.png
           path: playwright-report/screenshot.png
           retention-days: 10
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    steps:
+       - name: test echo
+         run: echo 'failure'
