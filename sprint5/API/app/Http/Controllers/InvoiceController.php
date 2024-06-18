@@ -6,7 +6,6 @@ use App\Http\Requests\Invoice\DestroyInvoice;
 use App\Http\Requests\Invoice\StoreInvoice;
 use App\Jobs\SendCheckoutEmail;
 use App\Jobs\UpdateProductInventory;
-use App\Mail\Checkout;
 use App\Models\PaymentBankTransferDetails;
 use App\Models\Cart;
 use App\Models\Download;
@@ -16,14 +15,12 @@ use App\Models\PaymentBnplDetails;
 use App\Models\PaymentCashOnDeliveryDetails;
 use App\Models\PaymentCreditCardDetails;
 use App\Models\PaymentGiftCardDetails;
-use App\Models\Product;
 use App\Rules\SubscriptSuperscriptRule;
-use Haruncpi\LaravelIdGenerator\IdGenerator;
+use App\Services\InvoiceNumberGenerator;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
@@ -31,8 +28,11 @@ use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 class InvoiceController extends Controller
 {
 
-    public function __construct()
+    protected $invoiceNumberGenerator;
+
+    public function __construct(InvoiceNumberGenerator $invoiceNumberGenerator)
     {
+        $this->invoiceNumberGenerator = $invoiceNumberGenerator;
         $this->middleware('auth:users');
     }
 
@@ -43,46 +43,35 @@ class InvoiceController extends Controller
      *      tags={"Invoice"},
      *      summary="Retrieve all invoices",
      *      description="`admin` retrieves all invoices, `user` retrieves only related invoices",
+     *      @OA\Parameter(
+     *          name="page",
+     *          in="query",
+     *          description="pagenumber",
+     *          required=false,
+     *          @OA\Schema(type="integer")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(
+     *              title="PaginatedInvoiceResponse",
      *              @OA\Property(property="current_page", type="integer", example=1),
      *              @OA\Property(
      *                  property="data",
      *                  type="array",
      *                  @OA\Items(ref="#/components/schemas/InvoiceResponse")
      *              ),
-     *              @OA\Property(property="next_page_url", type="integer", example=1),
-     *              @OA\Property(property="path", type="integer", example=1),
+     *              @OA\Property(property="from", type="integer", example=1),
+     *              @OA\Property(property="last_page", type="integer", example=1),
      *              @OA\Property(property="per_page", type="integer", example=1),
-     *              @OA\Property(property="prev_page_url", type="integer", example=1),
      *              @OA\Property(property="to", type="integer", example=1),
      *              @OA\Property(property="total", type="integer", example=1),
      *          )
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function index()
@@ -110,33 +99,12 @@ class InvoiceController extends Controller
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/InvoiceResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function store(StoreInvoice $request)
@@ -144,7 +112,12 @@ class InvoiceController extends Controller
         $input = $request->except(['cart_id']);
         $input['user_id'] = Auth::user()->id;
         $input['invoice_date'] = now();
-        $input['invoice_number'] = IdGenerator::generate(['table' => 'invoices', 'field' => 'invoice_number', 'length' => 14, 'prefix' => 'INV-' . now()->year]);
+        $input['invoice_number'] = $this->invoiceNumberGenerator->generate([
+            'table' => 'invoices',
+            'field' => 'invoice_number',
+            'length' => 14,
+            'prefix' => 'INV-' . now()->year
+        ]);
 
         $invoice = Invoice::create($input);
 
@@ -195,7 +168,7 @@ class InvoiceController extends Controller
         ]);
 
         // Check payment method and create corresponding payment details
-        if ($paymentMethod === 'Bank Transfer') {
+        if ($paymentMethod === 'bank-transfer') {
             $request->validate([
                 'payment_details.bank_name' => 'required|string|max:255|regex:/^[a-zA-Z ]+$/',
                 'payment_details.account_name' => 'required|string|max:255|regex:/^[a-zA-Z0-9 .\'-]+$/',
@@ -209,7 +182,7 @@ class InvoiceController extends Controller
             $payment->payment_details_type = PaymentBankTransferDetails::class;
         }
 
-        if ($paymentMethod === 'Cash on Delivery') {
+        if ($paymentMethod === 'cash-on-delivery') {
             $cashOnDeliveryDetails = new PaymentCashOnDeliveryDetails();
             $cashOnDeliveryDetails->save();
 
@@ -217,7 +190,7 @@ class InvoiceController extends Controller
             $payment->payment_details_type = PaymentCashOnDeliveryDetails::class;
         }
 
-        if ($paymentMethod === 'Credit Card') {
+        if ($paymentMethod === 'credit-card') {
             $request->validate([
                 'payment_details.credit_card_number' => 'required|string|regex:/^\d{4}-\d{4}-\d{4}-\d{4}$/',
                 'payment_details.expiration_date' => 'required|date_format:m/Y|after:today',
@@ -232,7 +205,7 @@ class InvoiceController extends Controller
             $payment->payment_details_type = PaymentCreditCardDetails::class;
         }
 
-        if ($paymentMethod === 'Buy Now Pay Later') {
+        if ($paymentMethod === 'buy-now-pay-later') {
             $request->validate([
                 'payment_details.monthly_installments' => 'required|numeric',
             ]);
@@ -244,7 +217,7 @@ class InvoiceController extends Controller
             $payment->payment_details_type = PaymentBnplDetails::class;
         }
 
-        if ($paymentMethod === 'Gift Card') {
+        if ($paymentMethod === 'gift-card') {
             $request->validate([
                 'payment_details.gift_card_number' => 'required|string|max:255|regex:/^[a-zA-Z0-9]+$/',
                 'payment_details.validation_code' => 'required|string|max:255|regex:/^[a-zA-Z0-9]+$/',
@@ -286,37 +259,19 @@ class InvoiceController extends Controller
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/InvoiceResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function show($id)
     {
         if (app('auth')->parseToken()->getPayload()->get('role') == "admin") {
-            return $this->preferredFormat(Invoice::with('invoicelines', 'invoicelines.product', 'payment', 'payment.payment_details')->where('id', $id)->first());
+            return $this->preferredFormat(Invoice::with('invoicelines', 'invoicelines.product', 'payment', 'payment.payment_details')->findOrFail($id));
         } else {
-            return $this->preferredFormat(Invoice::with('invoicelines', 'invoicelines.product', 'payment', 'payment.payment_details')->where('id', $id)->where('user_id', Auth::user()->id)->first());
+            return $this->preferredFormat(Invoice::with('invoicelines', 'invoicelines.product', 'payment', 'payment.payment_details')->where('user_id', Auth::user()->id)->findOrFail($id));
         }
     }
 
@@ -339,35 +294,17 @@ class InvoiceController extends Controller
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/InvoiceResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function downloadPDF($invoice_number)
     {
-        if (Storage::exists('invoices/' . $invoice_number . '.pdf')) {
-            return Storage::download('invoices/' . $invoice_number . '.pdf', $invoice_number . '.pdf');
+        if (Storage::exists("invoices/{$invoice_number}.pdf")) {
+            return Storage::download("invoices/{$invoice_number}.pdf", "{$invoice_number}.pdf");
         } else {
             return $this->preferredFormat(['message' => 'Document not created. Try again later.'], ResponseAlias::HTTP_NOT_FOUND);
         }
@@ -392,29 +329,11 @@ class InvoiceController extends Controller
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/InvoiceResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function downloadPDFStatus($invoice_number)
@@ -442,50 +361,33 @@ class InvoiceController extends Controller
      *          @OA\Schema(type="string")
      *      ),
      *      @OA\RequestBody(
-     *          required=true,
-     *          description="Invoice request object",
-     *          @OA\JsonContent(ref="#/components/schemas/InvoiceRequest")
-     *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Result of the update",
      *          @OA\MediaType(
-     *              mediaType="application/json",
-     *              @OA\Schema(
-     *                  @OA\Property(property="success",
-     *                       type="boolean",
-     *                       example=true,
-     *                       description=""
-     *                  ),
-     *              )
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *                  mediaType="application/json",
+     *             @OA\Schema(
+     *                 title="InvoiceStatusRequest",
+     *                 @OA\Property(
+     *                    property="status",
+     *                    type="string",
+     *                    enum={"AWAITING_FULFILLMENT", "ON_HOLD", "AWAITING_SHIPMENT", "SHIPPED", "COMPLETED"},
+     *                    description="The status of the order"
+     *                 ),
+     *                 @OA\Property(
+     *                    property="status_message",
+     *                    type="string",
+     *                    description="A message describing the status",
+     *                    nullable=true,
+     *                    minLength=5,
+     *                    maxLength=50
+     *                 ),
+     *               )
+     *           )
+     *       ),
+     *       @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *       @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *       @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *       @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *       @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *       security={{ "apiAuth": {} }}
      * )
      */
     public function updateStatus($id, Request $request)
@@ -495,7 +397,16 @@ class InvoiceController extends Controller
             'status_message' => ['string', 'between:5,50', 'nullable', new SubscriptSuperscriptRule()]
         ]);
 
-        return $this->preferredFormat(['success' => (bool)Invoice::where('id', $id)->update(array('status' => $request['status'], 'status_message' => $request['status_message']))]);
+        $affectedRows = Invoice::where('id', $id)->update([
+            'status' => $request['status'],
+            'status_message' => $request['status_message']
+        ]);
+
+        if ($affectedRows === 0) {
+            return $this->preferredFormat(['message' => 'Invoice not found'], ResponseAlias::HTTP_NOT_FOUND);
+        }
+
+        return $this->preferredFormat(['success' => true], ResponseAlias::HTTP_OK);
     }
 
     /**
@@ -512,38 +423,35 @@ class InvoiceController extends Controller
      *          required=true,
      *          @OA\Schema(type="string")
      *      ),
+     *      @OA\Parameter(
+     *          name="page",
+     *          in="query",
+     *          description="pagenumber",
+     *          required=false,
+     *          @OA\Schema(type="integer")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(
+     *              title="PaginatedInvoiceResponse",
      *              @OA\Property(property="current_page", type="integer", example=1),
      *              @OA\Property(
      *                  property="data",
      *                  type="array",
      *                  @OA\Items(ref="#/components/schemas/InvoiceResponse")
      *              ),
-     *              @OA\Property(property="next_page_url", type="integer", example=1),
-     *              @OA\Property(property="path", type="integer", example=1),
+     *              @OA\Property(property="from", type="integer", example=1),
+     *              @OA\Property(property="last_page", type="integer", example=1),
      *              @OA\Property(property="per_page", type="integer", example=1),
-     *              @OA\Property(property="prev_page_url", type="integer", example=1),
      *              @OA\Property(property="to", type="integer", example=1),
      *              @OA\Property(property="total", type="integer", example=1),
      *          )
-     *       ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function search(Request $request)
@@ -576,46 +484,12 @@ class InvoiceController extends Controller
      *          description="Invoice request object",
      *          @OA\JsonContent(ref="#/components/schemas/InvoiceRequest")
      *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Result of the update",
-     *          @OA\MediaType(
-     *              mediaType="application/json",
-     *              @OA\Schema(
-     *                  @OA\Property(property="success",
-     *                       type="boolean",
-     *                       example=true,
-     *                       description=""
-     *                  ),
-     *              )
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function update(StoreInvoice $request, $id)
@@ -637,40 +511,13 @@ class InvoiceController extends Controller
      *          required=true,
      *          @OA\Schema(type="string")
      *      ),
-     *      @OA\Response(
-     *          response=204,
-     *          description="Successful operation"
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=409,
-     *          description="Returns when the entity is used elsewhere",
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response=204, description="Successful operation"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="409", ref="#/components/responses/ConflictResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *      security={{ "apiAuth": {} }}
      * ),
      */
     public function destroy(DestroyInvoice $request, $id)

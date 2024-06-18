@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Favorite\DestroyFavorite;
 use App\Http\Requests\Favorite\StoreFavorite;
 use App\Models\Favorite;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
@@ -29,29 +28,11 @@ class FavoriteController extends Controller {
      *              type="array",
      *              @OA\Items(ref="#/components/schemas/FavoriteResponse")
      *          )
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function index() {
@@ -74,33 +55,12 @@ class FavoriteController extends Controller {
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/FavoriteResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function store(StoreFavorite $request) {
@@ -129,29 +89,11 @@ class FavoriteController extends Controller {
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/FavoriteResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function show($id) {
@@ -172,40 +114,13 @@ class FavoriteController extends Controller {
      *          required=true,
      *          @OA\Schema(type="string")
      *      ),
-     *      @OA\Response(
-     *          response=204,
-     *          description="Successful operation"
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=409,
-     *          description="Returns when the entity is used elsewhere",
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response=204, description="Successful operation"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="409", ref="#/components/responses/ConflictResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
+     *      security={{ "apiAuth": {} }}
      * ),
      */
     public function destroy(DestroyFavorite $request, $id) {

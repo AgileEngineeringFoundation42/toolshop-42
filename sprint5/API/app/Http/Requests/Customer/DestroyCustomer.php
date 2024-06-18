@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Http\Requests;
+namespace app\Http\Requests\Customer;
+
+use App\Http\Requests\BaseFormRequest;
 
 class DestroyCustomer extends BaseFormRequest
 {

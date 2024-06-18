@@ -2,12 +2,13 @@ import {Component, OnInit} from '@angular/core';
 import {CartService} from "../../_services/cart.service";
 import {FavoriteService} from "../../_services/favorite.service";
 import {ActivatedRoute} from "@angular/router";
-import {ToastService} from "../../_services/toast.service";
 import {Product} from "../../models/product";
 import DiscountUtil from "../../_helpers/discount.util";
 import {ProductService} from "../../_services/product.service";
-import { Options } from 'ngx-slider-v2';
 import {BrowserDetectorService} from "../../_services/browser-detector.service";
+import {Title} from "@angular/platform-browser";
+import {Options} from "@angular-slider/ngx-slider";
+import {ToastrService} from "ngx-toastr";
 
 @Component({
   selector: 'app-detail',
@@ -29,10 +30,10 @@ export class DetailComponent implements OnInit {
   constructor(private cartService: CartService,
               private favoriteService: FavoriteService,
               private route: ActivatedRoute,
-              private toastService: ToastService,
+              private toastr: ToastrService,
               private productService: ProductService,
-              public browserDetect: BrowserDetectorService) {
-
+              public browserDetect: BrowserDetectorService,
+              private titleService: Title) {
   }
 
   ngOnInit(): void {
@@ -57,6 +58,7 @@ export class DetailComponent implements OnInit {
   getProduct(id: string) {
     this.productService.getProduct(id).subscribe(response => {
       this.product = response;
+      this.updateTitle(this.product.name);
       if (this.product.is_location_offer) {
         this.product.discount_price = DiscountUtil.calculateDiscount(this.product.price);
       }
@@ -73,12 +75,12 @@ export class DetailComponent implements OnInit {
   addToFavorites(product: any) {
     let payload = {product_id: product.id}
     this.favoriteService.addFavorite(payload).subscribe(() => {
-      this.toastService.show('Product added to your favorites list.', {classname: 'bg-success text-light'})
+      this.toastr.success('Product added to your favorites list.', null, {progressBar: true});
     }, (response) => {
       if (response.error.message === 'Duplicate Entry') {
-        this.toastService.show('Product already in your favorites list.', {classname: 'bg-warning text-dark'})
+        this.toastr.error('Product already in your favorites list.', null, {progressBar: true});
       } else if (response.error.message === 'Unauthorized') {
-        this.toastService.show('Unauthorized, can not add product to your favorite list.', {classname: 'bg-danger text-light'})
+        this.toastr.error('Unauthorized, can not add product to your favorite list.', null, {progressBar: true});
       }
     });
   }
@@ -93,9 +95,13 @@ export class DetailComponent implements OnInit {
         'total': this.quantity * price
       }
       this.cartService.addItem(item).subscribe(() => {
-        this.toastService.show('Product added to shopping cart.', {classname: 'bg-success text-light'});
+        this.toastr.success('Product added to shopping cart.', null, {progressBar: true});
       });
     }
+  }
+
+  private updateTitle(productName: string) {
+    this.titleService.setTitle(`${productName} - Practice Software Testing - Toolshop - v5.0`);
   }
 
 }

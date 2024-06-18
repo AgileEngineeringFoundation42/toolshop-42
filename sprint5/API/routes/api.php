@@ -62,7 +62,7 @@ Route::controller(CategoryController::class)->prefix('categories')->group(functi
     Route::get('/tree', 'indexTree');
     Route::get('', 'index');
     Route::get('/search', 'search');
-    Route::get('/{id}', 'show');
+    Route::get('/tree/{id}', 'show');
     Route::post('', 'store');
     Route::put('/{id}', 'update');
     Route::delete('/{id}', 'destroy');
@@ -82,7 +82,6 @@ Route::controller(FavoriteController::class)->prefix('favorites')->group(functio
     Route::post('', 'store');
     Route::get('/{id}', 'show');
     Route::delete('/{id}', 'destroy');
-    Route::put('/{id}', 'update');
 });
 
 Route::controller(ImageController::class)->prefix('images')->group(function () {

@@ -9,9 +9,11 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
-class CartController extends Controller {
+class CartController extends Controller
+{
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->middleware('role:admin', ['only' => ['destroy']]);
     }
 
@@ -28,6 +30,7 @@ class CartController extends Controller {
      *         @OA\MediaType(
      *                 mediaType="application/json",
      *            @OA\Schema(
+     *                title="CartCreatedResponse",
      *                @OA\Property(property="cart_id",
      *                         type="string",
      *                         example="1234",
@@ -36,36 +39,16 @@ class CartController extends Controller {
      *              )
      *          )
      *      ),
-     * @OA\Response(
-     *          response=404,
-     *          description="Returns when requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     * @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     * @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      * )
      */
-    public function createCart(Request $request) {
-        $lat = $request->input('lat');
-        $lng = $request->input('lng');
-
-        $cart = new Cart();
-        if (isset($lat) && isset($lng)) {
-            $cart->lat = $lat;
-            $cart->lng = $lng;
-        }
+    public function createCart(Request $request)
+    {
+        $cart = new Cart($request->only(['lat', 'lng']));
         $cart->save();
+
         return $this->preferredFormat(['id' => $cart->id], ResponseAlias::HTTP_CREATED);
     }
 
@@ -106,6 +89,7 @@ class CartController extends Controller {
      *         @OA\MediaType(
      *                 mediaType="application/json",
      *            @OA\Schema(
+     *                title="CartItemAddedResponse",
      *                @OA\Property(property="result",
      *                         type="string",
      *                         example="item added or updated",
@@ -114,72 +98,29 @@ class CartController extends Controller {
      *              )
      *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      * )
      */
-    public function addItem(Request $request, $id) {
-        // Find the cart
-        $cart = Cart::with('cartItems')->find($id);
-
-        if (!isset($cart)) {
-            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_CREATED);
-        }
+    public function addItem(Request $request, $id)
+    {
+        $cart = Cart::with('cartItems')->findOrFail($id);
 
         $product_id = $request->input('product_id');
         $quantity = $request->input('quantity');
 
-        // Check if the item with the same product_id already exists in the cart
-        $existingItem = $cart->cartItems->where('product_id', $product_id)->first();
+        $existingItem = $cart->cartItems()->firstOrCreate(['product_id' => $product_id]);
+        $existingItem->increment('quantity', $quantity);
 
-        if ($existingItem) {
-            // If the item exists, update its quantity
-            $existingItem->quantity += $quantity;
+        if ($cart->lat && $cart->lng && $existingItem->product->is_location_offer) {
+            $existingItem->discount_percentage = $this->calculateDiscountPercentage($cart->lat, $cart->lng);
             $existingItem->save();
-        } else {
-            // If the item does not exist, create a new CartItem and add it to the cart
-            $item = new CartItem();
-            // Check if lat and lng are set
-            if ($cart->lat !== null && $cart->lng !== null) {
-                // Calculate the discount percentage based on lat and lng
-                $product = Product::find($product_id);
-                if($product->is_location_offer) {
-                    $lat = $cart->lat;
-                    $lng = $cart->lng;
-                    $discountPercentage = $this->calculateDiscountPercentage($lat, $lng);
-
-                    // Store the discount percentage in the database
-                    $item->discount_percentage = $discountPercentage;
-
-                }
-            }
-
-            $item->product_id = $product_id;
-            $item->quantity = $quantity;
-
-            $cart->cartItems()->save($item);
         }
 
         $this->updateCartDiscounts($cart);
 
-        // Return a response indicating success or any additional data you need
-        return $this->preferredFormat(['result' => 'item added or updated'], ResponseAlias::HTTP_CREATED);
+        return $this->preferredFormat(['result' => 'item added or updated'], ResponseAlias::HTTP_OK);
     }
 
     /**
@@ -201,56 +142,38 @@ class CartController extends Controller {
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/CartResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
      * )
      */
-    public function getCart($id) {
-        // Find the cart
-        $cart = Cart::with('cartItems', 'cartItems.product')->findOrFail($id);
-        // Iterate through cart items to calculate discounted prices
+    public function getCart($id)
+    {
+        $cart = Cart::with(['cartItems', 'cartItems.product'])->findOrFail($id);
+
         foreach ($cart->cartItems as $cartItem) {
-            if ($cartItem->product && $cartItem->discount_percentage !== null) {
-                // Calculate discounted price
-                $discountedPrice = $cartItem->product->price * (1 - ($cartItem->discount_percentage / 100));
-                // Round the discounted price to two decimal places
-                $discountedPrice = round($discountedPrice, 2);
-                // Add the discounted price to the cartItem object
-                $cartItem->discounted_price = $discountedPrice;
+            if ($cartItem->product && $cartItem->discount_percentage) {
+                $cartItem->discounted_price = round($cartItem->product->price * (1 - ($cartItem->discount_percentage / 100)), 2);
             }
         }
 
-        // Return the cart with discounted prices
         return $this->preferredFormat($cart);
     }
 
     /**
      * @OA\Put(
-     *      path="/carts/{cartId}",
+     *      path="/carts/{cartId}/product/quantity",
      *      operationId="updateCartQuantity",
      *      tags={"Cart"},
      *      summary="Update quantity of item in cart",
      *      description="Update quantity of item in cart",
-    *       @OA\Parameter(
-     *            name="cartId",
-     *            in="path",
-     *            required=true,
-     *            @OA\Schema(type="string"),
-     *            description="Cart ID"
-     *        ),
+     *      @OA\Parameter(
+     *           name="cartId",
+     *           in="path",
+     *           required=true,
+     *           @OA\Schema(type="string"),
+     *           description="Cart ID"
+     *      ),
      *      @OA\RequestBody(
      *            required=true,
      *            description="Payload to add item to cart",
@@ -267,50 +190,25 @@ class CartController extends Controller {
      *                    example=1
      *                )
      *            )
-     *        ),
-     *      @OA\Response(
-     *           response=200,
-     *           description="Item added",
-     *          @OA\MediaType(
-     *                  mediaType="application/json",
-     *             @OA\Schema(
-     *                 @OA\Property(property="success",
-     *                          type="boolean",
-     *                          example="true",
-     *                          description=""
-     *                      )
-     *               )
-     *           )
      *       ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      ),
+     *       @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *       @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *       @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *       @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      * )
      */
-    public function updateQuantity(Request $request, $cartId) {
-        // Find the cart
+    public function updateQuantity(Request $request, $cartId)
+    {
         $cart = Cart::with('cartItems')->find($cartId);
 
         if (!isset($cart)) {
-            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_CREATED);
+            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_NOT_FOUND);
         }
+        $updateStatus = $cart->cartItems()
+            ->where('product_id', $request->input('product_id'))
+            ->update(['quantity' => $request->input('quantity')]);
 
-        return $this->preferredFormat(['success' => (bool)CartItem::where('cart_id', '=', $cart->id)->where('product_id', '=', $request->input('product_id'))->update(['quantity' => $request->input('quantity')])], ResponseAlias::HTTP_OK);
+        return $this->preferredFormat(['success' => (bool)$updateStatus], ResponseAlias::HTTP_OK);
     }
 
     /**
@@ -328,69 +226,25 @@ class CartController extends Controller {
      *          example=1,
      *          @OA\Schema(type="string")
      *      ),
-     *    @OA\Parameter(
-     *           name="productId",
-     *           in="path",
-     *           description="The cartId parameter in path",
-     *           required=true,
-     *           example=1,
-     *           @OA\Schema(type="string")
-     *       ),
-     *      @OA\Response(
-     *          response=204,
-     *          description="Successful operation"
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=409,
-     *          description="Returns when the entity is used elsewhere",
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      )
+     *      @OA\Response(response=204, description="Successful operation"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *      @OA\Response(response="409", ref="#/components/responses/ConflictResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      * ),
      */
-    public function deleteCart($cartId) {
-        // Find the cart
+    public function deleteCart($cartId)
+    {
         $cart = Cart::with('cartItems')->find($cartId);
 
         if (!isset($cart)) {
-            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_CREATED);
+            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_NOT_FOUND);
         }
 
-        try {
-            CartItem::where('cart_id', '=', $cartId)->delete();
-            Cart::destroy($cartId);
-            return $this->preferredFormat(null, ResponseAlias::HTTP_NO_CONTENT);
-        } catch (QueryException $e) {
-            if ($e->getCode() === '23000') {
-                return $this->preferredFormat([
-                    'success' => false,
-                    'message' => 'Seems like this cart is used elsewhere.',
-                ], ResponseAlias::HTTP_CONFLICT);
-            }
-        }
+        $cart->cartItems()->delete();
+        $cart->delete();
+        return $this->preferredFormat(null, ResponseAlias::HTTP_NO_CONTENT);
     }
 
     /**
@@ -408,86 +262,48 @@ class CartController extends Controller {
      *          example=1,
      *          @OA\Schema(type="string")
      *      ),
-     *    @OA\Parameter(
+     *      @OA\Parameter(
      *           name="productId",
      *           in="path",
      *           description="The cartId parameter in path",
      *           required=true,
      *           example=1,
      *           @OA\Schema(type="string")
-     *       ),
-     *      @OA\Response(
-     *          response=204,
-     *          description="Successful operation"
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=409,
-     *          description="Returns when the entity is used elsewhere",
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=422,
-     *          description="Returns when the server was not able to process the content",
-     *      )
+     *      @OA\Response(response=204, description="Successful operation"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *      @OA\Response(response="409", ref="#/components/responses/ConflictResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      * ),
      */
-    public function removeProductFromCart($cartId, $productId) {
+    public function removeProductFromCart($cartId, $productId)
+    {
         // Find the cart
         $cart = Cart::with('cartItems')->find($cartId);
 
         if (!isset($cart)) {
-            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_CREATED);
+            return $this->preferredFormat(['message' => 'Cart doesnt exists'], ResponseAlias::HTTP_NOT_FOUND);
         }
 
-        try {
-            CartItem::where('cart_id', '=', $cart->id)->where('product_id', '=', $productId)->delete();
-            $this->updateCartDiscounts($cart);
-            return $this->preferredFormat(null, ResponseAlias::HTTP_NO_CONTENT);
-        } catch (QueryException $e) {
-            if ($e->getCode() === '23000') {
-                return $this->preferredFormat([
-                    'success' => false,
-                    'message' => 'Seems like this cart is used elsewhere.',
-                ], ResponseAlias::HTTP_CONFLICT);
-            }
-        }
+        $cart->cartItems()->where('product_id', $productId)->delete();
+        $this->updateCartDiscounts($cart);
+        return $this->preferredFormat(null, ResponseAlias::HTTP_NO_CONTENT);
     }
 
-    private function updateCartDiscounts($cart) {
+    private function updateCartDiscounts($cart)
+    {
         $cart->load('cartItems.product');
         $hasProduct = $cart->cartItems->contains(fn($item) => !$item->product->is_rental);
         $hasRental = $cart->cartItems->contains(fn($item) => $item->product->is_rental);
 
-        if ($hasProduct && $hasRental) {
-            $cart->additional_discount_percentage = 15;
-            $cart->save();
-        } else {
-            $cart->additional_discount_percentage = null;
-            $cart->save();
-        }
+        $cart->additional_discount_percentage = $hasProduct && $hasRental ? 15 : null;
+        $cart->save();
     }
 
-    private function calculateDiscountPercentage($lat, $lng) {
+    private function calculateDiscountPercentage($lat, $lng)
+    {
         $coordinates = [
             "new york" => ["lat" => 41, "lng" => 74, "discount_percentage" => 5],
             "mumbai" => ["lat" => 19, "lng" => 73, "discount_percentage" => 10],
@@ -500,7 +316,7 @@ class CartController extends Controller {
         $defaultDiscountPercentage = 0;
 
         // Check if the provided coordinates match any of the predefined coordinates
-        foreach ($coordinates as $city => $data) {
+        foreach ($coordinates as $data) {
             $cityLat = $data["lat"];
             $cityLng = $data["lng"];
             $discount = $data["discount_percentage"];

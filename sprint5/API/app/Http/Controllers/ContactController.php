@@ -41,6 +41,7 @@ class ContactController extends Controller
      *          @OA\MediaType(
      *              mediaType="application/json",
      *              @OA\Schema(
+     *                  title="AddContactMessageResponse",
      *                  @OA\Property(property="success",
      *                       type="boolean",
      *                       example=true,
@@ -49,20 +50,8 @@ class ContactController extends Controller
      *              )
      *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
+     *      @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
      * )
      */
     public function send(StoreContact $request)
@@ -70,11 +59,11 @@ class ContactController extends Controller
         if (Auth::check()) {
             $input = $request->all();
             $input['user_id'] = Auth::user()->id;
-            $result = ContactRequests::create($input);
         } else {
             $input = $request->all();
-            $result = ContactRequests::create($input);
         }
+        $input['status'] = 'NEW';
+        $result = ContactRequests::create($input);
 
         if (App::environment('local')) {
             $email = ($request->input('email')) ? $request->input('email') : Auth::user()->email;
@@ -104,6 +93,7 @@ class ContactController extends Controller
      *         @OA\MediaType(
      *             mediaType="multipart/form-data",
      *             @OA\Schema(
+     *                title="AttachFileRequest",
      *                @OA\Property(
      *                    description="File",
      *                    property="file",
@@ -118,6 +108,7 @@ class ContactController extends Controller
      *          @OA\MediaType(
      *              mediaType="application/json",
      *              @OA\Schema(
+     *                  title="FileUploadResponse",
      *                  @OA\Property(property="success",
      *                       type="boolean",
      *                       example=true,
@@ -126,20 +117,8 @@ class ContactController extends Controller
      *              )
      *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
+     *      @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
      * )
      */
     public function attachFile($id, Request $request)
@@ -168,46 +147,35 @@ class ContactController extends Controller
      *      tags={"Contact"},
      *      summary="Retrieve messages",
      *      description="`admin` retrieves all messages, `user` retrieves only related messages",
+     *      @OA\Parameter(
+     *          name="page",
+     *          in="query",
+     *          description="pagenumber",
+     *          required=false,
+     *          @OA\Schema(type="integer")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(
+     *              title="PaginatedContactMessageResponse",
      *              @OA\Property(property="current_page", type="integer", example=1),
      *              @OA\Property(
      *                  property="data",
      *                  type="array",
      *                  @OA\Items(ref="#/components/schemas/ContactResponse")
      *              ),
-     *              @OA\Property(property="next_page_url", type="integer", example=1),
-     *              @OA\Property(property="path", type="integer", example=1),
+     *              @OA\Property(property="from", type="integer", example=1),
+     *              @OA\Property(property="last_page", type="integer", example=1),
      *              @OA\Property(property="per_page", type="integer", example=1),
-     *              @OA\Property(property="prev_page_url", type="integer", example=1),
      *              @OA\Property(property="to", type="integer", example=1),
      *              @OA\Property(property="total", type="integer", example=1),
      *          )
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ResourceNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function index()
@@ -239,28 +207,10 @@ class ContactController extends Controller
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/ContactResponse")
      *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function show($id)
@@ -296,29 +246,11 @@ class ContactController extends Controller
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/ContactReplyResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function storeReply(StoreContactReply $request, $id)
@@ -350,6 +282,7 @@ class ContactController extends Controller
      *        @OA\MediaType(
      *                mediaType="application/json",
      *           @OA\Schema(
+     *               title="ContactStatusRequest",
      *               @OA\Property(property="status",
      *                        type="string",
      *                        example="IN_PROGRESS"
@@ -357,41 +290,10 @@ class ContactController extends Controller
      *             )
      *         )
      *     ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Result of the update",
-     *          @OA\MediaType(
-     *              mediaType="application/json",
-     *              @OA\Schema(
-     *                  @OA\Property(property="success",
-     *                       type="boolean",
-     *                       example=true,
-     *                       description=""
-     *                  ),
-     *              )
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the requested item is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Requested item not found"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Returns when the method is not allowed for the requested route",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Method is not allowed for the requested route"),
-     *          )
-     *      ),
+     *     @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *     @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *     @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *     @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
      *     security={{ "apiAuth": {} }}
      * )
      */

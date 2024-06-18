@@ -34,27 +34,15 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
      *     security={{ "apiAuth": {} }}
      * )
      */
     public function totalSalesPerCountry()
     {
         $results = DB::table('invoices')
-            ->select(DB::raw('SUM(total) as "total_sales", billing_country'))
+            ->selectRaw('SUM(total) as "total_sales", billing_country')
             ->groupBy('billing_country')
             ->get();
 
@@ -82,28 +70,16 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function top10PurchasedProducts()
     {
         $results = DB::table('products AS p')
             ->join('invoice_items AS i', 'i.product_id', '=', 'p.id')
-            ->select(DB::raw('p.name, count(p.name) as count'))
+            ->selectRaw('p.name, count(p.name) as count')
             ->groupBy('p.name')
             ->orderByDesc('count')
             ->limit(10)
@@ -133,33 +109,18 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function top10BestSellingCategories()
     {
-        $results = DB::table(DB::raw('(SELECT c.name as "category_name", SUM(i.unit_price) as "total_earned"
-                FROM invoice_items i
-                JOIN products p
-                ON p.id = i.product_id
-                JOIN categories c
-                ON p.category_id = c.id
-                GROUP BY c.name) as f'))
-            ->select(DB::raw('category_name, total_earned'))
+        $results = DB::table('categories AS c')
+            ->join('products AS p', 'p.category_id', '=', 'c.id')
+            ->join('invoice_items AS i', 'i.product_id', '=', 'p.id')
+            ->selectRaw('c.name as category_name, SUM(i.unit_price) as total_earned')
+            ->groupBy('c.name')
             ->orderByDesc('total_earned')
             ->limit(10)
             ->get();
@@ -196,46 +157,35 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function totalSalesOfYears(Request $request)
     {
-        $numberOfYears = $request->get('years', 1) - 1;
-        $endYear = intval(date("Y"));
-        $startYear = date("Y") - $numberOfYears;
+        $numberOfYears = $request->get('years', 1);
+        $endYear = now()->year;
+        $startYear = $endYear - $numberOfYears;
+
+        $driver = config('database.default');
+        if ($driver == 'sqlite') {
+            $yearQuery = "strftime('%Y', invoice_date) AS year";
+            $yearGroup = "strftime('%Y', invoice_date)";
+        } elseif ($driver == 'mysql') {
+            $yearQuery = 'YEAR(invoice_date) AS year';
+            $yearGroup = 'YEAR(invoice_date)';
+        }
 
         $results = DB::table('invoices')
-            ->select(DB::raw('SUM(total) AS total, year(invoice_date) AS year'))
-            ->whereBetween('invoice_date', [$startYear . '-01-01', $endYear . '-12-31'])
-            ->groupBy('year')
+            ->selectRaw("SUM(total) AS total, $yearQuery")
+            ->whereYear('invoice_date', '>=', $startYear)
+            ->groupBy(DB::raw($yearGroup))
             ->get();
 
-        $dates = [];
-        foreach ($results as $result) {
-            $dates[$result->year] = floatval($result->total);
-        }
+        $formattedResults = $this->formatYearlySalesData($results, $startYear, $endYear);
 
-        for ($i = $startYear; $i <= $endYear; $i++) {
-            $item['year'] = $i;
-            $item['total'] = $dates[$i] ?? 0;
-            $rs[] = $item;
-        }
-        return $this->preferredFormat($rs);
+        return $this->preferredFormat($formattedResults);
     }
 
     /**
@@ -268,46 +218,33 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function averageSalesPerMonth(Request $request)
     {
-        $year = $request->get('year', date('Y'));
+        $year = $request->get('year', now()->year);
+
+        $driver = config('database.default');
+        if ($driver == 'sqlite') {
+            $monthQuery = 'CAST(strftime("%m", invoice_date) AS INTEGER) AS month';
+            $monthGroup = 'strftime("%m", invoice_date)';
+        } elseif ($driver == 'mysql') {
+            $monthQuery = 'MONTH(invoice_date) AS month';
+            $monthGroup = 'MONTH(invoice_date)';
+        }
 
         $results = DB::table('invoices')
-            ->select(DB::raw('month(invoice_date) AS month,avg(total) AS average, count(*) AS amount'))
-            ->whereBetween('invoice_date', [$year . '-01-01', $year . '-12-31'])
-            ->groupByRaw('month(invoice_date)')
+            ->selectRaw("$monthQuery, AVG(total) AS average, COUNT(*) AS amount")
+            ->whereYear('invoice_date', '=', $year)
+            ->groupBy(DB::raw($monthGroup))
             ->get();
 
-        $dates = [];
-        foreach ($results as $result) {
-            $dates[$result->month]['avg'] = floatval($result->average);
-            $dates[$result->month]['amount'] = floatval($result->amount);
-        }
+        $formattedResults = $this->formatMonthlySalesData($results);
 
-        for ($i = 1; $i <= 12; $i++) {
-            $item['month'] = $i;
-            $item['average'] = $dates[$i]['avg'] ?? 0;
-            $item['amount'] = $dates[$i]['amount'] ?? 0;
-            $rs[] = $item;
-        }
-        return $this->preferredFormat($rs);
+        return $this->preferredFormat($formattedResults);
     }
 
     /**
@@ -340,46 +277,33 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function averageSalesPerWeek(Request $request)
     {
-        $year = $request->get('year', date('Y'));
+        $year = $request->get('year', now()->year);
+
+        $driver = config('database.default');
+        if ($driver == 'sqlite') {
+            $weekQuery = 'CAST(strftime("%W", invoice_date) AS INTEGER) AS week';
+            $weekGroup = 'strftime("%W", invoice_date)';
+        } elseif ($driver == 'mysql') {
+            $weekQuery = 'WEEK(invoice_date) AS week';
+            $weekGroup = 'WEEK(invoice_date)';
+        }
 
         $results = DB::table('invoices')
-            ->select(DB::raw('week(invoice_date) AS week,avg(total) AS average, count(*) AS amount'))
-            ->whereBetween('invoice_date', [$year . '-01-01', $year . '-12-31'])
-            ->groupByRaw('week(invoice_date)')
+            ->selectRaw("$weekQuery, AVG(total) AS average, COUNT(*) AS amount")
+            ->whereYear('invoice_date', '=', $year)
+            ->groupBy(DB::raw($weekGroup))
             ->get();
 
-        $dates = [];
-        foreach ($results as $result) {
-            $dates[$result->week]['avg'] = floatval($result->average);
-            $dates[$result->week]['amount'] = floatval($result->amount);
-        }
+        $formattedResults = $this->formatWeeklySalesData($results);
 
-        for ($i = 1; $i <= 52; $i++) {
-            $item['week'] = $i;
-            $item['average'] = $dates[$i]['avg'] ?? 0;
-            $item['amount'] = $dates[$i]['amount'] ?? 0;
-            $rs[] = $item;
-        }
-        return $this->preferredFormat($rs);
+        return $this->preferredFormat($formattedResults);
     }
 
     /**
@@ -389,14 +313,6 @@ class ReportController extends Controller
      *      tags={"Report"},
      *      summary="Get customers by country",
      *      description="`Admin` role is required to get customers by country",
-     *      @OA\Parameter(
-     *          name="country",
-     *          in="query",
-     *          description="Specific year",
-     *          required=false,
-     *          example=2021,
-     *          @OA\Schema(type="string", default="The Netherlands")
-     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
@@ -411,35 +327,91 @@ class ReportController extends Controller
      *              )
      *          ),
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
     public function customersByCountry(Request $request)
     {
-        $country = $request->get('country', 'The Netherlands');
-
         $results = DB::table('users AS u')
-            ->select(DB::raw('CONCAT(u.first_name, " ", u.last_name) AS customer, u.country AS country'))
-            ->where('u.country', '=', $country)
+            ->selectRaw('COUNT(*) AS amount, u.country')
             ->where('u.role', '=', 'user')
-            ->groupByRaw('u.first_name, u.last_name, u.country')
+            ->groupBy('u.country')
             ->get();
 
         return $this->preferredFormat($results);
+    }
+
+    private function formatYearlySalesData($results, $startYear, $endYear)
+    {
+        $formattedResults = [];
+        $yearlyData = [];
+
+        foreach ($results as $result) {
+            $yearlyData[$result->year] = [
+                'year' => $result->year,
+                'total' => floatval($result->total)
+            ];
+        }
+
+        for ($year = $startYear; $year <= $endYear; $year++) {
+            if (array_key_exists($year, $yearlyData)) {
+                $formattedResults[] = $yearlyData[$year];
+            } else {
+                $formattedResults[] = ['year' => $year, 'total' => 0];
+            }
+        }
+
+        return $formattedResults;
+    }
+
+    private function formatMonthlySalesData($results)
+    {
+        $formattedResults = [];
+        $monthlyData = [];
+
+        foreach ($results as $result) {
+            $monthlyData[$result->month] = [
+                'month' => $result->month,
+                'average' => floatval($result->average),
+                'amount' => floatval($result->amount)
+            ];
+        }
+
+        for ($month = 1; $month <= 12; $month++) {
+            if (array_key_exists($month, $monthlyData)) {
+                $formattedResults[] = $monthlyData[$month];
+            } else {
+                $formattedResults[] = ['month' => $month, 'average' => 0, 'amount' => 0];
+            }
+        }
+
+        return $formattedResults;
+    }
+
+    private function formatWeeklySalesData($results)
+    {
+        $formattedResults = [];
+        $weeklyData = [];
+
+        foreach ($results as $result) {
+            $weeklyData[$result->week] = [
+                'week' => $result->week,
+                'average' => floatval($result->average),
+                'amount' => floatval($result->amount)
+            ];
+        }
+
+        for ($week = 1; $week <= 52; $week++) {
+            if (array_key_exists($week, $weeklyData)) {
+                $formattedResults[] = $weeklyData[$week];
+            } else {
+                $formattedResults[] = ['week' => $week, 'average' => 0, 'amount' => 0];
+            }
+        }
+
+        return $formattedResults;
     }
 
 }

@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\DestroyCustomer;
-use App\Http\Requests\StoreCustomer;
-use App\Http\Requests\UpdateCustomer;
+use App\Http\Requests\Customer\DestroyCustomer;
+use App\Http\Requests\Customer\StoreCustomer;
+use App\Http\Requests\Customer\UpdateCustomer;
 use App\Mail\ForgetPassword;
 use App\Mail\Register;
 use App\Models\User;
@@ -15,15 +15,18 @@ use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 
-class UserController extends Controller {
+class UserController extends Controller
+{
     const MAX_LOGIN_ATTEMPTS = 3;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->middleware('auth:users', ['except' => ['login', 'store', 'forgotPassword', 'refresh']]);
         $this->middleware('assign.guard:users');
-        $this->middleware('role:admin', ['only' => ['index', 'destroy' ]]);
+        $this->middleware('role:admin', ['only' => ['index', 'destroy']]);
     }
 
     /**
@@ -33,6 +36,13 @@ class UserController extends Controller {
      *      tags={"User"},
      *      summary="Retrieve all users",
      *      description="Retrieve all users",
+     *      @OA\Parameter(
+     *          name="page",
+     *          in="query",
+     *          description="pagenumber",
+     *          required=false,
+     *          @OA\Schema(type="integer")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
@@ -40,22 +50,17 @@ class UserController extends Controller {
      *              type="array",
      *              @OA\Items(ref="#/components/schemas/UserResponse")
      *          )
-     *       ),
+     *      ),
      *      @OA\Response(
      *          response=400,
      *          description="Bad Request"
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function index() {
+    public function index()
+    {
         return $this->preferredFormat(User::where('role', '=', 'user')->paginate());
     }
 
@@ -80,22 +85,20 @@ class UserController extends Controller {
      *          response=400,
      *          description="Bad Request"
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Unauthenticated",
-     *      ),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
      *      @OA\Response(
      *          response=403,
      *          description="Forbidden"
      *      )
      * )
      */
-    public function store(StoreCustomer $request) {
+    public function store(StoreCustomer $request)
+    {
         $input = $request->all();
         $input['role'] = 'user';
 
         if (App::environment('local')) {
-            Mail::to([$input['email']])->send(new Register($input['first_name'] . ' ' . $input['last_name'], $input['email'], $input['password']));
+            Mail::to([$input['email']])->send(new Register("{$input['first_name']} {$input['last_name']}", $input['email'], $input['password']));
         }
         // Hash the password
         $input['password'] = app('hash')->make($input['password']);
@@ -129,6 +132,7 @@ class UserController extends Controller {
      *        @OA\MediaType(
      *                mediaType="application/json",
      *           @OA\Schema(
+     *               title="TokenResponse",
      *               @OA\Property(property="access_token",
      *                        type="string",
      *                        example="super-secret-token",
@@ -156,35 +160,34 @@ class UserController extends Controller {
 
         $credentials = $request->only(['email', 'password']);
 
+        // Check if the user exists
+        $user = User::where('email', $credentials['email'])->first();
+
+        // Check if user exists and if role is not admin
+        if ($user && $user->role != "admin") {
+            // Check if account is locked
+            if ($user->failed_login_attempts >= self::MAX_LOGIN_ATTEMPTS) {
+                return $this->lockedAccountResponse();
+            }
+        }
+
         // Attempt login and get token
         $token = app('auth')->attempt($credentials);
 
         // Check if login was successful
         if (!$token) {
             // Login failed
-            $user = User::where('email', $credentials['email'])->first();
             if ($user && $user->role != "admin") {
                 $this->incrementLoginAttempts($user);
             }
             return $this->failedLoginResponse();
         }
 
-        // At this point, login is successful
-        $user = auth()->user();
-
         // Check if the user is enabled
         if (!$user->enabled) {
             return response()->json([
                 'error' => 'Account disabled.'
             ], ResponseAlias::HTTP_FORBIDDEN);
-        }
-
-        // Check if user exists and if role is not admin
-        if ($user->role != "admin") {
-            // Check if account is locked
-            if ($user->failed_login_attempts >= self::MAX_LOGIN_ATTEMPTS) {
-                return $this->lockedAccountResponse();
-            }
         }
 
         // Reset failed login attempts on successful login
@@ -235,32 +238,20 @@ class UserController extends Controller {
      *      operationId="forgotPassword",
      *      tags={"User"},
      *      summary="Request a new password",
-     *      description="Request a new password, it actually sets the password to `welcome01`",
-     *     @OA\RequestBody(
-     *        @OA\MediaType(
-     *                mediaType="application/json",
-     *           @OA\Schema(
-     *               @OA\Property(property="email",
-     *                        type="string",
-     *                        example="customer@practicesoftwaretesting.com"
-     *               )
-     *             )
+     *      description="Request a new password, it actually sets the password to `welcome02`",
+     *      @OA\RequestBody(
+     *         @OA\MediaType(
+     *                 mediaType="application/json",
+     *            @OA\Schema(
+     *                @OA\Property(property="email",
+     *                         type="string",
+     *                         example="customer@practicesoftwaretesting.com"
+     *                )
+     *            )
      *         )
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Result of the update",
-     *        @OA\MediaType(
-     *                mediaType="application/json",
-     *           @OA\Schema(
-     *               @OA\Property(property="success",
-     *                        type="boolean",
-     *                        example=true,
-     *                        description=""
-     *                ),
-     *             )
-     *         )
-     *     ),
+     *      ),
+     *      @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
      *      @OA\Response(
      *          response=400,
      *          description="Bad Request"
@@ -271,7 +262,8 @@ class UserController extends Controller {
      *      )
      * )
      */
-    public function forgotPassword(Request $request) {
+    public function forgotPassword(Request $request)
+    {
         $request->validate([
             'email' => 'exists:users,email'
         ]);
@@ -280,7 +272,7 @@ class UserController extends Controller {
 
         if (App::environment('local')) {
             $user = User::where('email', $request['email'])->first();
-            Mail::to([$request['email']])->send(new ForgetPassword($user->first_name . ' ' . $user->last_name, "welcome02"));
+            Mail::to([$request['email']])->send(new ForgetPassword("{$user->first_name} {$user->last_name}", "welcome02"));
         }
         return $this->preferredFormat(['success' => (bool)User::where('email', $request['email'])->update(['password' => $request['password']])], ResponseAlias::HTTP_OK);
     }
@@ -292,50 +284,32 @@ class UserController extends Controller {
      *      tags={"User"},
      *      summary="Change password",
      *      description="Change the existing password to a new one",
-     *     @OA\RequestBody(
-     *        @OA\MediaType(
-     *                mediaType="application/json",
-     *           @OA\Schema(
-     *               @OA\Property(property="current_password",
-     *                        type="string",
-     *                        example="welcome01"
-     *               ),
-     *               @OA\Property(property="new_password",
-     *                        type="string",
-     *                        example="welcome02"
-     *               ),
-     *               @OA\Property(property="new_password_confirmation",
-     *                        type="string",
-     *                        example="welcome02"
-     *               )
-     *             )
-     *         )
-     *     ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Result of the update",
-     *          @OA\MediaType(
-     *              mediaType="application/json",
-     *              @OA\Schema(
-     *                  @OA\Property(property="success",
-     *                       type="boolean",
-     *                       example=true,
-     *                       description=""
-     *                  ),
+     *      @OA\RequestBody(
+     *         @OA\MediaType(
+     *                 mediaType="application/json",
+     *            @OA\Schema(
+     *                @OA\Property(property="current_password",
+     *                         type="string",
+     *                         example="welcome01"
+     *                ),
+     *                @OA\Property(property="new_password",
+     *                         type="string",
+     *                         example="welcome02"
+     *                ),
+     *                @OA\Property(property="new_password_confirmation",
+     *                         type="string",
+     *                         example="welcome02"
+     *                )
      *              )
      *          )
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function changePassword(Request $request) {
+    public function changePassword(Request $request)
+    {
         $current = $request->get('current_password');
         $new = $request->get('new_password');
         $confirm = $request->get('new_password_confirmation');
@@ -356,7 +330,7 @@ class UserController extends Controller {
 
         $request->validate([
             'current_password' => 'required',
-            'new_password' => ['required', 'string', 'min:8', 'confirmed', new SubscriptSuperscriptRule()],
+            'new_password' => ['required', Password::min(8)->mixedCase()->numbers()->symbols()->uncompromised(), 'confirmed', new SubscriptSuperscriptRule()],
         ]);
 
         $user = Auth::user();
@@ -376,17 +350,12 @@ class UserController extends Controller {
      *         description="A customer",
      *         @OA\JsonContent(ref="#/components/schemas/UserResponse"),
      *     ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
+     *     @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
      *     security={{ "apiAuth": {} }}
      * )
      */
-    public function me() {
+    public function me()
+    {
         return response()->json(Auth::user());
     }
 
@@ -403,8 +372,9 @@ class UserController extends Controller {
      *          @OA\MediaType(
      *              mediaType="application/json",
      *              @OA\Schema(
+     *                  title="LogoutResponse",
      *                  @OA\Property(property="message",
-     *                       type="String",
+     *                       type="string",
      *                       example="Successfully logged out",
      *                       description=""
      *                  ),
@@ -415,17 +385,12 @@ class UserController extends Controller {
      *          response=400,
      *          description="Bad Request"
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function logout() {
+    public function logout()
+    {
         app('auth')->logout();
 
         return response()->json(['message' => 'Successfully logged out']);
@@ -444,6 +409,7 @@ class UserController extends Controller {
      *        @OA\MediaType(
      *                mediaType="application/json",
      *           @OA\Schema(
+     *               title="TokenResponse",
      *               @OA\Property(property="access_token",
      *                        type="string",
      *                        example="super-secret-token",
@@ -461,22 +427,17 @@ class UserController extends Controller {
      *                    )
      *             )
      *         )
-     *     ),
+     *      ),
      *      @OA\Response(
      *          response=400,
      *          description="Bad Request"
      *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function refresh() {
+    public function refresh()
+    {
         return $this->respondWithToken(app('auth')->refresh(true, false));
     }
 
@@ -499,26 +460,15 @@ class UserController extends Controller {
      *          response=200,
      *          description="Successful operation",
      *          @OA\JsonContent(ref="#/components/schemas/UserResponse")
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Requested item not found"
-     *      ),
-     *      @OA\Response(
-     *          response=405,
-     *          description="Method not allowed for requested route"
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function show($id) {
+    public function show($id)
+    {
         if (app('auth')->parseToken()->getPayload()->get('role') == "admin") {
             return $this->preferredFormat(User::findOrFail($id));
         } else {
@@ -540,6 +490,13 @@ class UserController extends Controller {
      *          required=true,
      *          @OA\Schema(type="string")
      *      ),
+     *      @OA\Parameter(
+     *          name="page",
+     *          in="query",
+     *          description="pagenumber",
+     *          required=false,
+     *          @OA\Schema(type="integer")
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="Successful operation",
@@ -547,25 +504,14 @@ class UserController extends Controller {
      *              type="array",
      *              @OA\Items(ref="#/components/schemas/UserResponse")
      *          )
-     *       ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
      *      ),
-     *      @OA\Response(
-     *          response=404,
-     *          description="Returns when the resource is not found",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Resource not found"),
-     *          )
-     *      ),
-     *     security={{ "apiAuth": {} }}
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function search(Request $request) {
+    public function search(Request $request)
+    {
         $q = $request->get('q');
 
         return $this->preferredFormat(User::where('role', '=', 'user')->where(function ($query) use ($q) {
@@ -595,41 +541,40 @@ class UserController extends Controller {
      *          description="User request object",
      *          @OA\JsonContent(ref="#/components/schemas/UserRequest")
      *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="Result of the update",
-     *          @OA\MediaType(
-     *              mediaType="application/json",
-     *              @OA\Schema(
-     *                  @OA\Property(property="success",
-     *                       type="boolean",
-     *                       example=true,
-     *                       description=""
-     *                  ),
-     *              )
-     *          )
-     *      ),
-     *      @OA\Response(
-     *          response=400,
-     *          description="Bad Request"
-     *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
+     *      @OA\Response(response="200", ref="#/components/responses/UpdateResponse"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
+     *      @OA\Response(response="422", ref="#/components/responses/UnprocessableEntityResponse"),
      *      @OA\Response(
      *          response=403,
      *          description="Forbidden"
      *      ),
-     *     security={{ "apiAuth": {} }}
+     *      security={{ "apiAuth": {} }}
      * )
      */
-    public function update(UpdateCustomer $request, $id) {
+    public function update(UpdateCustomer $request, $id)
+    {
+        $user = User::findOrFail($id);
+
+        // Check if the current user is the same as the one being updated or is an admin
         if ((app('auth')->id() == $id) || (app('auth')->parseToken()->getPayload()->get('role') == "admin")) {
-            return $this->preferredFormat(['success' => (bool)User::where('id', $id)->update($request->all())], ResponseAlias::HTTP_OK);
+            // If the 'role' field is present in the request, ensure the authenticated user is an admin
+            if ($request->has('role')) {
+                if (app('auth')->parseToken()->getPayload()->get('role') !== "admin") {
+                    return response()->json(['error' => 'Only admins can update the role.'], ResponseAlias::HTTP_FORBIDDEN);
+                }
+            }
+
+            // Update the user with the request data
+            $updateData = $request->except('password');
+
+            // For non-admin users, remove the 'role' field from the update data if present
+            if (app('auth')->parseToken()->getPayload()->get('role') !== "admin") {
+                unset($updateData['role']);
+            }
+
+            $success = $user->update($updateData);
+            return $this->preferredFormat(['success' => (bool)$success], ResponseAlias::HTTP_OK);
         } else {
             return response()->json(['error' => 'You can only update your own data.'], ResponseAlias::HTTP_FORBIDDEN);
         }
@@ -649,21 +594,11 @@ class UserController extends Controller {
      *          required=true,
      *          @OA\Schema(type="string")
      *      ),
-     *      @OA\Response(
-     *          response=204,
-     *          description="Successful operation"
-     *       ),
-     *      @OA\Response(
-     *          response=400,
-     *          description="Bad Request"
-     *      ),
-     *      @OA\Response(
-     *          response=401,
-     *          description="Returns when user is not authenticated",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="message", type="string", example="Unauthorized"),
-     *          )
-     *      ),
+     *      @OA\Response(response=204, description="Successful operation"),
+     *      @OA\Response(response="401", ref="#/components/responses/UnauthorizedResponse"),
+     *      @OA\Response(response="404", ref="#/components/responses/ItemNotFoundResponse"),
+     *      @OA\Response(response="409", ref="#/components/responses/ConflictResponse"),
+     *      @OA\Response(response="405", ref="#/components/responses/MethodNotAllowedResponse"),
      *      @OA\Response(
      *          response=403,
      *          description="Forbidden"
@@ -671,13 +606,12 @@ class UserController extends Controller {
      *     security={{ "apiAuth": {} }}
      * ),
      */
-    public function destroy(DestroyCustomer $request, $id) {
+    public function destroy(DestroyCustomer $request, $id)
+    {
         try {
             if (app('auth')->parseToken()->getPayload()->get('role') == "admin") {
                 User::find($id)->delete();
                 return $this->preferredFormat(null, ResponseAlias::HTTP_NO_CONTENT);
-            } else {
-                return response()->json(['error' => 'Only admins can delete accounts.'], ResponseAlias::HTTP_FORBIDDEN);
             }
         } catch (QueryException $e) {
             if ($e->getCode() === '23000') {

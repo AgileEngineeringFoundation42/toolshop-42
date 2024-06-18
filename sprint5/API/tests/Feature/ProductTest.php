@@ -4,11 +4,11 @@ namespace tests\Feature;
 
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Symfony\Component\HttpFoundation\Response as ResponseAlias;
 use Tests\TestCase;
 
@@ -91,6 +91,25 @@ class ProductTest extends TestCase {
             ]);
     }
 
+    public function testRetrieveProductsByQuery() {
+        $this->addProduct();
+
+        $response = $this->getJson('/products?q=test-product');
+
+        $response
+            ->assertStatus(ResponseAlias::HTTP_OK)
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'name',
+                        'description',
+                        'price',
+                        'name',
+                    ]
+                ]
+            ]);
+    }
+
     public function testRetrieveRentals() {
         $this->addProduct();
 
@@ -113,7 +132,7 @@ class ProductTest extends TestCase {
     public function testRetrieveProduct() {
         $product = $this->addProduct();
 
-        $response = $this->getJson('/products/' . $product->id);
+        $response = $this->getJson("/products/{$product->id}");
 
         $response
             ->assertStatus(ResponseAlias::HTTP_OK)
@@ -170,7 +189,7 @@ class ProductTest extends TestCase {
     public function testDeleteProductUnauthorized() {
         $product = $this->addProduct();
 
-        $this->json('DELETE', '/products/' . $product->id)
+        $this->json('DELETE', "/products/{$product->id}")
             ->assertStatus(ResponseAlias::HTTP_UNAUTHORIZED);
     }
 
@@ -179,7 +198,7 @@ class ProductTest extends TestCase {
 
         $product = $this->addProduct();
 
-        $this->deleteJson('/products/' . $product->id, [], $this->headers($admin))
+        $this->deleteJson("/products/{$product->id}", [], $this->headers($admin))
             ->assertStatus(ResponseAlias::HTTP_NO_CONTENT);
     }
 
@@ -193,12 +212,24 @@ class ProductTest extends TestCase {
             ]);
     }
 
+    public function testDeleteProductInUse() {
+        $invoice = Invoice::factory()->create([
+            'total' => 150.00,
+            'billing_country' => 'The Netherlands'
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->deleteJson("/products/{$invoice->invoicelines[0]['product_id']}", [], $this->headers($admin))
+            ->assertStatus(ResponseAlias::HTTP_CONFLICT);
+    }
+
     public function testUpdateProduct() {
         $product = $this->addProduct();
 
         $payload = ['name' => 'new name'];
 
-        $this->putJson('/products/' . $product->id, $payload)
+        $this->putJson("/products/{$product->id}", $payload)
             ->assertStatus(ResponseAlias::HTTP_OK)
             ->assertJson([
                 'success' => true
@@ -208,7 +239,7 @@ class ProductTest extends TestCase {
     public function testRetrieveRelatedProducts() {
         $product = $this->addProduct();
 
-        $response = $this->getJson('/products/' . $product->id . '/related');
+        $response = $this->getJson("/products/{$product->id}/related");
 
         $response
             ->assertStatus(ResponseAlias::HTTP_OK)

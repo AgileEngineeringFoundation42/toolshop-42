@@ -23,8 +23,8 @@ use Tymon\JWTAuth\Contracts\JWTSubject;
  *         @OA\Property(property="postcode", type="string", example="1234AA"),
  *         @OA\Property(property="phone", type="string", example="0987654321"),
  *         @OA\Property(property="dob", type="string", example="1970-01-01"),
- *         @OA\Property(property="email", type="string", example="john@doe.example"),
- *         @OA\Property(property="password", type="string", example="super-secret")
+ *         @OA\Property(property="password", type="string", example="super-secret"),
+ *         @OA\Property(property="email", type="string", example="john@doe.example")
  *     }
  * )
  *
@@ -66,7 +66,7 @@ class User extends Authenticatable implements JWTSubject
      *
      * @var array<int, string>
      */
-    protected $hidden = ['updated_at', 'password', 'role', 'uid'];
+    protected $hidden = ['enabled', 'failed_login_attempts', 'updated_at', 'password', 'role', 'uid'];
 
     /**
      * The attributes that should be cast.
@@ -77,20 +77,58 @@ class User extends Authenticatable implements JWTSubject
         'created_at' => 'datetime:Y-m-d H:i:s'
     );
 
+//    protected $appends = ['admin_details'];
+
     /**
      * Get the identifier that will be stored in the subject claim of the JWT.
      *
      * @return mixed
      */
-    public function getJWTIdentifier() {
+    public function getJWTIdentifier()
+    {
         return $this->getKey();
     }
+
     /**
      * Return a key value array, containing any custom claims to be added to the JWT.
      *
      * @return array
      */
-    public function getJWTCustomClaims() {
+    public function getJWTCustomClaims()
+    {
         return ['role' => $this->role];
     }
+
+    public function toArray()
+    {
+        $array = parent::toArray();
+
+        try {
+            $role = app('auth')->parseToken()->getPayload()->get('role');
+            if ($role == "admin") {
+                // Directly add the attributes to the root of the array
+                $array['enabled'] = $this->enabled;
+                $array['failed_login_attempts'] = $this->failed_login_attempts;
+            }
+        } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
+        }
+
+        return $array;
+    }
+
+//    public function getAdminDetailsAttribute()
+//    {
+//        try {
+//            $role = app('auth')->parseToken()->getPayload()->get('role');
+//            if ($role == "admin") {
+//                return [
+//                    'enabled' => $this->enabled,
+//                    'failed_login_attempts' => $this->failed_login_attempts,
+//                ];
+//            }
+//        } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
+//        }
+//
+//        return null;
+//    }
 }

@@ -1,11 +1,12 @@
 <?php
 
-namespace App\Http\Requests;
+namespace app\Http\Requests\Customer;
 
+use App\Http\Requests\BaseFormRequest;
 use App\Rules\SubscriptSuperscriptRule;
 use Carbon\Carbon;
 
-class StoreCustomer extends BaseFormRequest
+class UpdateCustomer extends BaseFormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -41,15 +42,14 @@ class StoreCustomer extends BaseFormRequest
         return [
             'first_name' => ['required', 'string', 'max:40', new SubscriptSuperscriptRule()],
             'last_name' => ['required', 'string', 'max:20', new SubscriptSuperscriptRule()],
-            'address' => ['string', 'max:70', new SubscriptSuperscriptRule()],
-            'city' => ['string', 'max:40', new SubscriptSuperscriptRule()],
-            'state' => ['string', 'max:40', new SubscriptSuperscriptRule()],
-            'country' => ['string', 'max:40', new SubscriptSuperscriptRule()],
-            'postcode' => ['string', 'max:10', new SubscriptSuperscriptRule()],
-            'phone' => ['string', 'max:24', new SubscriptSuperscriptRule()],
-            'dob' => ['date','before:' . $before],
-            'email' => ['required', 'unique:users,email', 'string', 'max:256', new SubscriptSuperscriptRule()],
-            'password' => ['required', 'string', 'max:255', new SubscriptSuperscriptRule()]
+            'address' => ['required', 'string', 'max:70', new SubscriptSuperscriptRule()],
+            'city' => ['required', 'string', 'max:40', new SubscriptSuperscriptRule()],
+            'state' => ['nullable', 'string', 'max:40', new SubscriptSuperscriptRule()],
+            'country' => ['required', 'string', 'max:40', new SubscriptSuperscriptRule()],
+            'postcode' => ['nullable', 'string', 'max:10', new SubscriptSuperscriptRule()],
+            'phone' => ['nullable', 'string', 'max:24', new SubscriptSuperscriptRule()],
+            'dob' => ['date', 'date_format:Y-m-d',"before:{$before}"],
+            'email' => ['required', 'string', 'max:256', new SubscriptSuperscriptRule()]
         ];
     }
 }
