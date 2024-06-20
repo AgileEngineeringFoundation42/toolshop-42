@@ -25,6 +25,7 @@ jobs:
             cd /root
             mkdir toolshop
             cd toolshop
+            docker-compose down -v --remove-orphans
             rm -rf toolshop-42
             git clone https://github.com/AgileEngineeringFoundation42/toolshop-42.git 
             cd toolshop-42
