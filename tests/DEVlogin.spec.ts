@@ -16,26 +16,36 @@ test.describe('Login Feature', () => {
 
 });
 
-// test.describe('Profile Name Order', () => {
+test.describe('Profile Name Order', () => {
 
-//     test('profile_name_order_test', async ({page}) => {
-//         await page.goto('https://with-bugs.practicesoftwaretesting.com/#/account/profile');
-//         await page.locator('#email').fill('customer2@practicesoftwaretesting.com');
-//         await page.locator('#password').fill('welcome01');
-//         await page.locator('[data-test="login-submit"]').click();
+    test('profile_name_order_test', async ({page}) => {
+        await page.goto('https://with-bugs.practicesoftwaretesting.com/#/account/profile');
+        await page.locator('#email').fill('customer2@practicesoftwaretesting.com');
+        await page.locator('#password').fill('welcome01');
+        await page.locator('[data-test="login-submit"]').click();
 
-//         await page.goto('https://with-bugs.practicesoftwaretesting.com/#/account/profile');
-//         const firstChild = await page.$('.col-lg-6 :first-child');
-//         // Get the text of the first child element
-//         if (firstChild)
-//         {
-//             const firstChildText = await firstChild.innerText();
-//             expect(firstChildText).toBe('Last Name');
-//         }
-//         await page.screenshot({ path: 'playwright-report/screenshot.png' });
-//     });
+        await page.goto('https://with-bugs.practicesoftwaretesting.com/#/account/profile');
+        await page.locator('[data-test="nav-profile"]').click();
+        const labels = await page.$$('.col-sm-3.col-form-label');
 
-// });
+        // Get the text of each label element
+        const labelTexts = await Promise.all(labels.map(label => label.innerText()));
+
+
+        // Check if the order of label texts matches the expected order
+        expect(labelTexts[0]).toEqual('Last Name');
+        expect(labelTexts[1]).toEqual('First Name');
+        // const firstChild = await page.$('.col-lg-6 :first-child');
+        // // Get the text of the first child element
+        // if (firstChild)
+        // {
+        //     const firstChildText = await firstChild.innerText();
+        //     expect(firstChildText).toBe('Last Name');
+        // }
+        await page.screenshot({ path: 'playwright-report/screenshot.png' });
+    });
+
+});
 
 
 test.describe('City Not Found', () => {
