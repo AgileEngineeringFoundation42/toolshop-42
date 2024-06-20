@@ -32,17 +32,23 @@ jobs:
     # needs: [unittest, lint]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
       - name: build_dockerimg
         run: |
           cd _docker && docker build -t app_image -f app.docker . 
           docker save -o app_image.tar app_image
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: app_image
-          path: ./_docker/app_image.tar
-
+          path: app_image.tar
 
   deploy2ahdev:
     name: deploy2ahdev
