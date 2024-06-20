@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: app_image
-          path: app_image.tar
+          path: ./_docker/app_image.tar
 
 
   deploy2ahdev:
