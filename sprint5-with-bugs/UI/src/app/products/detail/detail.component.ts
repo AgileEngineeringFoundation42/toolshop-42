@@ -44,9 +44,13 @@ export class DetailComponent implements OnInit {
 
 
   plus() {
+    this.quantity = this.quantity + 1;
   }
 
   minus() {
+    if (this.quantity != 1) {
+      this.quantity = this.quantity - 1;
+    }
   }
 
   getProduct(id: number) {
