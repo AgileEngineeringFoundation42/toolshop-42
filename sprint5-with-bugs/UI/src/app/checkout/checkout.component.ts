@@ -89,7 +89,7 @@ export class CheckoutComponent implements OnInit {
       this.cusAddress.get('city').setValue(this.customer.city);
       this.cusAddress.get('state').setValue(this.customer.state);
       this.cusAddress.get('country').setValue(this.customer.country);
-      this.cusAddress.get('postcode').setValue("missing value");
+      this.cusAddress.get('postcode').setValue(this.customer.postcode);
     });
   }
 
