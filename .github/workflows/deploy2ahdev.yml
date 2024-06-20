@@ -34,7 +34,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: build_dockerimg
-        run: cd _docker && docker build -t app_image -f app.docker .
+        run: cd _docker && docker build -t app_image -f app.docker . && docker save -o app_image.tar app_image
 
   deploy2ahdev:
     name: deploy2ahdev
