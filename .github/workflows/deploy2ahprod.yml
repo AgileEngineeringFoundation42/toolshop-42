@@ -1,8 +1,9 @@
 name: deploy2ahtprod.yml
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      ver_num:
+        type: text
 
 concurrency: production_environment
 
@@ -12,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: PRODUCTION
     steps:
+      - name: show release number
+        run: echo "${{ inputs.username }}"
       - name: Docker 
         uses: fifsky/ssh-action@master
         with:
@@ -23,6 +26,7 @@ jobs:
             cd /root
             cd toolshop/practice-software-testing
             git pull 
+            git checkout ${{ inputs.username }}
             ls -la
             cd practice-software-testing
             docker-compose up -d
