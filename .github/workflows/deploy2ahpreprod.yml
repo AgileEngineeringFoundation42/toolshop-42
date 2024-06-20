@@ -24,7 +24,7 @@ jobs:
             apt update -y && apt upgrade -y
             cd /root
             cd toolshop/practice-software-testing
-            git pull 
+            gh repo clone AgileEngineeringFoundation42/toolshop-42
             ls -la
             cd practice-software-testing
             docker-compose up -d
