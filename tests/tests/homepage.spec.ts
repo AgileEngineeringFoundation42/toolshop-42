@@ -15,19 +15,82 @@ test.describe('Logo test', () => {
 
 });
 
-/*import {test, expect} from '@playwright/test';
+import { test1, Home } from '@playwright/test';
 
-test.describe('sort test', () => {
+test('Home_test', async ({ page }) => {
+  // Navigate to the target page
+  await page.goto('http://109.176.250.87:4200/#/');
 
-    test('Checksort', async ({page}) => {
-        await page.goto('http://109.176.250.87:4200/#/');
+  // Locate the element with text "HOME"
+  const homeElement = await page.locator('text=Home');
 
-    // Locate the element
-    const element = await page.$('<option _ngcontent-bxg-c76="" value="" ng-reflect-value=""></option><option _ngcontent-bxg-c76="" value="name,desc" ng-reflect-value="name,desc">Name (A - Z)</option><option _ngcontent-bxg-c76="" value="name,asc" ng-reflect-value="name,asc">Name (Z - A)</option><option _ngcontent-bxg-c76="" value="price,asc" ng-reflect-value="price,asc">Price (High - Low)</option><option _ngcontent-bxg-c76="" value="price,desc" ng-reflect-value="price,desc">Price (Low - High)</option>');
+  // Assert the element exists and is visible
+  await expect(homeElement).toBeVisible();
 
-    // Assert the element exists
-    expect(element).not.toBeNull();
-    await page.screenshot({ path: 'playwright-report/logo_screenshot.png' });
-    });
+  // Optionally, take a screenshot
+  await page.screenshot({ path: 'playwright-report/home_element.png' });
+});
 
-});*/
+import { test2, Categories } from '@playwright/test';
+
+test('Categories_test', async ({ page }) => {
+  // Navigate to the target page
+  await page.goto('http://109.176.250.87:4200/#/');
+
+  // Locate the element with text "Catogories"
+  const homeElement = await page.locator('text=Categories');
+
+  // Assert the element exists and is visible
+  await expect(homeElement).toBeVisible();
+
+  // Optionally, take a screenshot
+  await page.screenshot({ path: 'playwright-report/home_element.png' });
+});
+
+import { test3, Push } from '@playwright/test';
+
+test('Push_test', async ({ page }) => {
+  // Navigate to the target page
+  await page.goto('http://109.176.250.87:4200/#/');
+
+  // Locate the element with text "push"
+  const homeElement = await page.locator('text=On push');
+
+  // Assert the element exists and is visible
+  await expect(homeElement).toBeVisible();
+
+  // Optionally, take a screenshot
+  await page.screenshot({ path: 'playwright-report/home_element.png' });
+});
+
+import { test4, Signin } from '@playwright/test';
+
+test('Signin_test', async ({ page }) => {
+  // Navigate to the target page
+  await page.goto('http://109.176.250.87:4200/#/');
+
+  // Locate the element with text "Signin"
+  const homeElement = await page.locator('text=Sign in');
+
+  // Assert the element exists and is visible
+  await expect(homeElement).toBeVisible();
+
+  // Optionally, take a screenshot
+  await page.screenshot({ path: 'playwright-report/home_element.png' });
+});
+
+import { test5, Sort } from '@playwright/test';
+
+test('Sort', async ({ page }) => {
+  // Navigate to the target page
+  await page.goto('http://109.176.250.87:4200/#/');
+
+  // Locate the element with text "sort"
+  const homeElement = await page.locator('text=Sort');
+
+  // Assert the element exists and is visible
+  await expect(homeElement).toBeVisible();
+
+  // Optionally, take a screenshot
+  await page.screenshot({ path: 'playwright-report/home_element.png' });
+});
