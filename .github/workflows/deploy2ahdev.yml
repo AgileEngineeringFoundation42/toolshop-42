@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [ main ]
 
-concurrency: production_environment
+# concurrency: production_environment
 
 jobs:
   lint:
