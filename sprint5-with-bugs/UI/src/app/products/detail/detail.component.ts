@@ -90,7 +90,7 @@ export class DetailComponent implements OnInit {
         'total': this.quantity * price
       }
       this.cartService.addItem(item);
-      this.toastService.show('Oeps, something went wrong.', {classname: 'bg-danger text-light'})
+      //this.toastService.show('Oeps, something went wrong.', {classname: 'bg-danger text-light'})
     }
   }
 
