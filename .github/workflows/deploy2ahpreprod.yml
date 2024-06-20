@@ -3,6 +3,7 @@ on:
   workflow_run:
     workflows: [deploy2ahtest.yml]
     types: [completed]
+  workflow_dispatch:
 
 concurrency: production_environment
 
