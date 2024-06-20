@@ -4,7 +4,7 @@ RUN apk update && \
     apk add bash && \
     npm install -g npm@8.3.0
 
-RUN npm install -s -g @angular/cli
+RUN npm install -s -g @angular/cli@17
 #    && \
 #    mkdir -p /app # Create a directory where our app will be placed
 
