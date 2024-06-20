@@ -1,8 +1,8 @@
 name: deploy2ahtpreprod.yml
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [deploy2ahtest.yml]
+    types: [completed]
 
 concurrency: production_environment
 
@@ -11,6 +11,7 @@ jobs:
     name: deploy2ahtpreprod
     runs-on: ubuntu-latest
     environment: PRE-PRODUCTION
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Docker 
         uses: fifsky/ssh-action@master
