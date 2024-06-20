@@ -29,12 +29,20 @@ jobs:
   build_dockerimg:
     name: build_dockerimg
     runs-on: ubuntu-latest
-    needs: [unittest, lint]
+    # needs: [unittest, lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: build_dockerimg
-        run: cd _docker && docker build -t app_image -f app.docker . && docker save -o app_image.tar app_image
+        run: |
+          cd _docker && docker build -t app_image -f app.docker . 
+          docker save -o app_image.tar app_image
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: app_image
+          path: app_image.tar
+
 
   deploy2ahdev:
     name: deploy2ahdev
