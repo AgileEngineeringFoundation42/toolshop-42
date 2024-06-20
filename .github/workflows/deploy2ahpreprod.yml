@@ -30,7 +30,7 @@ jobs:
             git clone https://github.com/AgileEngineeringFoundation42/toolshop-42.git 
             cd toolshop-42
             ls -la
-            docker-compose up -d
+            docker-compose up --build -d
             docker ps -a
             docker images
           #host: ${{ secrets.HOST }}
