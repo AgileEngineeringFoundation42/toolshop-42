@@ -3,7 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       ver_num:
-        type: text
+        description: 'Version number to deploy (e.g. v1.2)'
+        required: true
+        default: ''
 
 concurrency: production_environment
 
@@ -14,7 +16,7 @@ jobs:
     environment: PRODUCTION
     steps:
       - name: show release number
-        run: echo "${{ inputs.username }}"
+        run: echo "$${{ github.event.inputs.ver_num }}"
       - name: Docker 
         uses: fifsky/ssh-action@master
         with:
@@ -26,7 +28,7 @@ jobs:
             cd /root
             cd toolshop/practice-software-testing
             git pull 
-            git checkout ${{ inputs.username }}
+            git checkout ${{ github.event.inputs.ver_num }}
             ls -la
             cd practice-software-testing
             docker-compose up -d
