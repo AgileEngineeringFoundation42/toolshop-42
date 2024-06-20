@@ -26,6 +26,7 @@ jobs:
             git pull 
             ls -la
             cd practice-software-testing
+            docker-compose down --remove-orphans
             docker-compose up -d
             docker ps -a
             docker images
