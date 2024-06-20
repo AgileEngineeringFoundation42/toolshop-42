@@ -22,12 +22,14 @@ jobs:
             apt install docker-compose -y
             apt update -y && apt upgrade -y
             cd /root
-            cd toolshop/practice-software-testing
-            git pull 
+            mkdir toolshop
+            cd toolshop
+            docker-compose down -v --remove-orphans
+            rm -rf toolshop-42
+            git clone https://github.com/AgileEngineeringFoundation42/toolshop-42.git 
+            cd toolshop-42
             ls -la
-            cd practice-software-testing
-            docker-compose down --remove-orphans
-            docker-compose up -d
+            docker-compose up --build -d
             docker ps -a
             docker images
           #host: ${{ secrets.HOST }}
