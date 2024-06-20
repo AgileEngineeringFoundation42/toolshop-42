@@ -27,8 +27,9 @@ jobs:
             apt update -y && apt upgrade -y
             cd /root
             cd toolshop/practice-software-testing
-            git pull 
+            git pull --tags
             git checkout ${{ github.event.inputs.ver_num }}
+            git tag -l
             ls -la
             cd practice-software-testing
             docker-compose up -d
